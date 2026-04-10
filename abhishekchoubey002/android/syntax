@@ -1,0 +1,7 @@
+padding:
+	android:padding="8dp"
+	android:paddingLeft/Right/Top/Bottom="8dp"
+
+margin:
+	android:layout_margin="8dp"
+	<same as padding>

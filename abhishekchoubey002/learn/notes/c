@@ -1,0 +1,4 @@
+# C constructs and programming
+
+Q : Why use assertions ? 
+A : Bcoz we dont want to progress further with wrong values. Otherwise the program would move further assuming that there was no problem.

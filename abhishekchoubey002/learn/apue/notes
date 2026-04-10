@@ -1,0 +1,44 @@
+=============
+Chapter 7
+=============
+Q.7.1: How is a C program loaded into memory ?
+> by some exec program.
+
+2. Importance of prototype delcaration.
+> The default return value for a function is an integer. Hence consider the example of malloc.
+> if we dont include the header file (for prototype), then casting to the required pointer may be 
+> of some problem on some systems, if the size of integer varies.
+
+=============
+Chapter 8
+=============
+1. most operating systems implement an algorithm to delay the reuse of a pid.
+2. /sbin/init : reads all the init files after the kernel has been bootstrapped, inittab files ... 
+3. the parent and the child processes share the file descriptors
+4. vfork is same as fork, except for the fact that it does not copy anything, and it guarantees that the child executes first
+	bcoz as soon as vfork is called the parent process waits till the child calls
+
+===========================================================================================================================================
+ Symbol table: a list of names/symbols and their corresponding offsets in the text and data segments.
+
+Object file disassembly sections :
+ .init - Startup
+ .text - String
+ .fini - Shutdown
+ .rodata - Read Only
+ .data - Initialized Data
+ .tdata - Initialized Thread Data
+ .tbss - Uninitialized Thread Data
+ .ctors - Constructors
+ .dtors - Destructors
+ .got - Global Offset Table
+ .bss - Uninitialized Data
+
+Understanding ELF :
+> contains two things : elf header and elf data (readelf -h a.out : show elf header)
+> also contains : program headers or segments, sections and data
+> elf has two views : a linker view (to allow execution), a view for categorizing instruction and data 
+Linker view : when a .c file is compiled with -c, a .o(relocatable) object file is produced which is not executable, but relocatable.
+Now, this relocation is used for linking purposes, to link a function call and provide offset to the function being called w.r.t to the calee.
+Program headers are viewed by the kernel and mapped into the memory to create a process/memory image of a program for runtime.
+The kernel maps the program headers or the segments into the virtual address space.

@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html class="no-js"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width">
+		<meta name="google-site-verification" content="xZ8tprRgxVKs-DhnfqJKpzunFGFAPbflFTbgU8Sek1A">
+        <link rel="stylesheet" href="guide-to-advanced-programming-in-C_files/cmun-sans.css">
+        <link rel="stylesheet" href="guide-to-advanced-programming-in-C_files/normalize.css">
+        <link rel="stylesheet" href="guide-to-advanced-programming-in-C_files/main.css">
+        <link rel="stylesheet" href="guide-to-advanced-programming-in-C_files/pygments.css">
+        <script src="guide-to-advanced-programming-in-C_files/analytics.js" async=""></script><script src="guide-to-advanced-programming-in-C_files/modernizr-2.html"></script>
+    <script src="guide-to-advanced-programming-in-C_files/embed.js" async="" type="text/javascript"></script><script charset="UTF-8" async="" src="guide-to-advanced-programming-in-C_files/alfie.js"></script></head>
+	<body>
+
+    <div class="content">
+	<div class="article">
+<h1>Guide to Advanced Programming in C</h1>
+
+<p class="actions">
+<a href="http://pfacka.binaryparadise.com/">Back</a>
+</p>
+
+
+<p class="date">06 Jan 2014</p>
+<p class="abstract"></p>
+
+<div class="article_body">
+		<p><em>C language is language of choice for system programming, embedded systems and
+also viable option for many other applications. While it is not likely to have
+serious interest in computer programming and not to be touched by C, it is
+very challenging to understand all its aspects and shady corners. This
+article attempts to provide dense material to illuminate some of those areas.
+Namely: integer promotions, memory allocation, array to pointer conversions,
+explicit inlining, interpositioning and vector conversions.</em></p>
+
+<h2>Integer Overflows and Promotions</h2>
+
+<p>Most of us C programmers tend to assume that basic operations with integers
+are safe and exercise prudence elsewhere. Actually it is not that hard
+to run into trouble. Consider following code:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">**</span> <span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">long</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+         <span class="n">printf</span><span class="p">(</span><span class="s">"OK</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+         <span class="n">printf</span><span class="p">(</span><span class="s">"error</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>What happens is that variable <strong>i</strong> is converted to <em>unsigned integer</em>. Thus its
+value is no longer -1, but maximum value of <strong>size_t</strong>, which happens to be
+result type of <strong>sizeof</strong> operator. The reason why is that so is described
+by chapter <em>Usual arithmetic conversions</em> of the <a href="http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1256.pdf">C99</a>/<a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf">C11</a> standard:</p>
+
+<p><em>"If the operand that has unsigned integer type has rank greater or
+equal to the rank of the type of the other operand, then the operand with
+signed integer type is converted to the type of the operand with unsigned
+integer type."</em></p>
+
+<p>The <strong>size_t</strong> is by the C standard defined as unsigned integer with size at least
+16 bits. Usually <strong>size_t</strong> corresponds with <strong>long</strong> of given architecture.
+That makes the size of <strong>int</strong> and <strong>size_t</strong> at least equal and above rule enforces
+conversion to unsigned integer.</p>
+
+<p>That bring us to portability issues with integer sizes. The C standard does not
+exactly define sizes of <strong>short</strong>, <strong>int</strong>, <strong>long</strong>, <strong>long long</strong> and their unsigned
+versions. Only minimum sizes are enforced. For sake of example consider x86_64
+architecture.  <strong>long</strong> on Linux is 64-bit whereas on 64-bit Windows it is 32-bit.
+Common approach to make code more portable is to use length-specific types like
+<strong>uint16_t</strong> or <strong>int32_t</strong> defined by C99's <strong>stdint.h</strong> header file. Three kinds of
+integer types are defined there:</p>
+
+<ul>
+<li>with exactly specified size: <strong>uint8_t</strong> <strong>uint16_t</strong>, <strong>int32_t</strong>, etc.</li>
+<li>smallest type with at least specified size: <strong>uint_least8_t</strong>, <strong>uint_least16_t</strong>, <strong>int_least32_t</strong>, etc.</li>
+<li>most efficient type with at least specified size: <strong>uint_fast8_t</strong>, <strong>uint_fast16_t</strong>, <strong>int_fast32_t</strong>, etc.</li>
+</ul>
+
+
+<p>Unfortunately using <strong>stdint.h</strong> will not protect us from all trouble. The "integral
+promotion rule" of the C standard says:</p>
+
+<p><em>If an int can represent all values of the original type, the value is converted to an int;
+otherwise, it is converted to an unsigned int. These are called the integer
+promotions. All other types are unchanged by the integer promotions.</em></p>
+
+<p>Thus following code will return 65536 on 32-bit platforms, but 0 on 16-bit platforms.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">uint32_t</span> <span class="n">sum</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">uint16_t</span> <span class="n">a</span> <span class="o">=</span> <span class="mi">65535</span><span class="p">;</span>
+    <span class="n">uint16_t</span> <span class="n">b</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">a</span><span class="o">+</span><span class="n">b</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p><em>The integer promotions preserve value including sign. Whether a ‘‘plain’’
+char is treated as signed is implementation-defined."</em></p>
+
+<p>How <strong>char</strong> type is implemented usually depend on hardware architecture and/or
+OS and it is usually specified by ABI (Application Binary Interface) of particular
+platform. If you care to find out on your own, in case <strong>char</strong> is promoted as
+<strong>signed char</strong>, following code will print -128,-127 (x86 arch.) otherwise 128,129.
+The GCC has -funsigned-char switch to force unsigned promotion on x86 architecture.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">char</span> <span class="n">c</span> <span class="o">=</span> <span class="mi">128</span><span class="p">;</span>
+<span class="kt">char</span> <span class="n">d</span> <span class="o">=</span> <span class="mi">129</span><span class="p">;</span>
+<span class="n">printf</span><span class="p">(</span><span class="s">"%d,%d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span><span class="n">c</span><span class="p">,</span><span class="n">d</span><span class="p">);</span>
+</code></pre></div>
+
+
+<h2>Memory Allocation and Management</h2>
+
+<h3>malloc, calloc, realloc, free</h3>
+
+<p>The <strong>malloc</strong> allocates uninitialized memory object with size specified in
+bytes. What should happen if size is 0 depends on OS implementation or
+in other words neither C nor <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/malloc.html">POSIX</a> standard specify the
+behavior.</p>
+
+<p><em>If the size of the space requested is 0, the behavior is implementation-defined:
+the value returned shall be either a null pointer or a unique pointer.</em></p>
+
+<p><strong>malloc(0)</strong> usually goes with returning valid unique pointer. Either way return value
+could be passed as argument of <strong>free</strong> without ending up with error. In case of NULL
+pointer <strong>free</strong> does no action.</p>
+
+<p>Therefore if size argument is result of an expression, make sure to test for integer
+overflow.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">size_t</span> <span class="n">computed_size</span><span class="p">;</span>
+
+<span class="k">if</span> <span class="p">(</span><span class="n">elem_size</span> <span class="o">&amp;&amp;</span> <span class="n">num</span> <span class="o">&gt;</span> <span class="n">SIZE_MAX</span> <span class="o">/</span> <span class="n">elem_size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">errno</span> <span class="o">=</span> <span class="n">ENOMEM</span><span class="p">;</span>
+    <span class="n">err</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s">"overflow"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">computed_size</span> <span class="o">=</span> <span class="n">elem_size</span><span class="o">*</span><span class="n">num</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>For common case of allocating a sequence with equally sized elements, consider
+to use <strong>calloc</strong> instead of calculating size with expression. Additionally it will
+initialize allocated memory to zero. For releasing allocated space use <strong>free</strong> as usual.</p>
+
+<p>The <strong>realloc</strong> will change size of already allocated memory object. Function returns
+pointer to possibly new memory location with same content to the lesser of the new
+and old sizes. If new size is larger, additional space is left uninitialized. If provided
+pointer to old object is NULL and size non-zero behavior is equal to <strong>malloc</strong>.
+If new <strong>size</strong> is zero and provided memory object non-NULL, behavior of <strong>realloc</strong>
+is OS depended.</p>
+
+<p>Most implementations will attempt to free memory of an object and return value
+that <strong>malloc(0)</strong> would return or return NULL. For instance Windows will release memory
+and return NULL. OpenBSD will release too and return pointer to zero-sized object.</p>
+
+<p>In case of failure <strong>realloc</strong> shall return NULL and leave provided memory object
+intact. Thus it is important not only to check for integer overflow of size
+argument, but also to correctly handle object size if <strong>realloc</strong> fails.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;malloc.h&gt;</span>
+<span class="cp">#include &lt;errno.h&gt;</span>
+
+<span class="cp">#define VECTOR_OK            0</span>
+<span class="cp">#define VECTOR_NULL_ERROR    1</span>
+<span class="cp">#define VECTOR_SIZE_ERROR    2</span>
+<span class="cp">#define VECTOR_ALLOC_ERROR   3</span>
+
+<span class="k">struct</span> <span class="n">vector</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+    <span class="n">size_t</span> <span class="n">size</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="kt">int</span> <span class="n">create_vector</span><span class="p">(</span><span class="k">struct</span> <span class="n">vector</span> <span class="o">*</span><span class="n">vc</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">num</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">vc</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">VECTOR_NULL_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* check for integer and SIZE_MAX overflow */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">num</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">SIZE_MAX</span> <span class="o">/</span> <span class="n">num</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">errno</span> <span class="o">=</span> <span class="n">ENOMEM</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">VECTOR_SIZE_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="n">num</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+
+    <span class="cm">/* calloc faild */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">vc</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">VECTOR_ALLOC_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="n">num</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">VECTOR_OK</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">grow_vector</span><span class="p">(</span><span class="k">struct</span> <span class="n">vector</span> <span class="o">*</span><span class="n">vc</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">void</span> <span class="o">*</span><span class="n">newptr</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">size_t</span> <span class="n">newsize</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">vc</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">VECTOR_NULL_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+
+    <span class="cm">/* check for integer and SIZE_MAX overflow */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">SIZE_MAX</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">&lt;</span> <span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errno</span> <span class="o">=</span> <span class="n">ENOMEM</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">VECTOR_SIZE_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">newsize</span> <span class="o">=</span> <span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">*</span> <span class="mi">2</span><span class="p">;</span>
+
+    <span class="n">newptr</span> <span class="o">=</span> <span class="n">realloc</span><span class="p">(</span><span class="n">vc</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">,</span> <span class="n">newsize</span><span class="p">);</span>
+
+    <span class="cm">/* realloc faild; vector stays intact size was not changed */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">newptr</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">VECTOR_ALLOC_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* upon success; update new address and size */</span>
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">=</span> <span class="n">newptr</span><span class="p">;</span>
+    <span class="n">vc</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="n">newsize</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">VECTOR_OK</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<h3>Avoiding Fatal Errors</h3>
+
+<p>General approach to avoid problems with dynamic memory allocation is to write
+code as humbly and defensively as circumstances allow. Here are most common
+problems and a few approaches how to avoid them.</p>
+
+<h4>1) Double free corruption</h4>
+
+<p>Could be caused by calling <strong>free</strong> with pointer, which is either NULL pointer,
+pointer which was not allocated with <strong>malloc</strong> family function or <strong>free</strong> / <strong>realloc</strong>
+was already called with that pointer. To make code more resistant to such errors
+consider following points:</p>
+
+<ul>
+<li>Initialize pointers upon declaration with NULL in case you can not pass valid pointer immediately.</li>
+<li>Both <em>GCC</em> and <em>Clang</em> have <em>-Wuninitialized</em> switch to warn about uninitialized variables</li>
+<li>Do not use same pointer variable for both statically and dynamically allocated memory</li>
+<li>After calling <strong>free</strong> set pointer back to NULL so if you accidentally call it again it will not cause error</li>
+<li>To indicate double free use <strong>assert</strong> or its alternative while testing and debugging</li>
+</ul>
+
+
+<div class="highlight"><pre><code class="c++"><span class="kt">char</span> <span class="o">*</span><span class="n">ptr</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+<span class="cm">/* ... */</span>
+
+<span class="kt">void</span> <span class="n">nullfree</span><span class="p">(</span><span class="kt">void</span> <span class="o">**</span><span class="n">pptr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span> <span class="o">=</span> <span class="o">*</span><span class="n">pptr</span><span class="p">;</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">ptr</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="n">free</span><span class="p">(</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">pptr</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<h4>2) Accessing memory through uninitialized or null pointer</h4>
+
+<p>Using rules above your code shall only be dealing with NULL or valid pointers.
+Check for NULL at beginning of function or blocks which are dereferencing pointers to
+dynamically allocated memory.</p>
+
+<h4>3) Accessing memory outside of allocated boundaries</h4>
+
+<p>Accessing memory object outside it's boundaries does not necessarily cause program to
+crash. Program might continue to operate using corrupted data with possibly dangerous behavior or
+It is also possible take advantage of such operations and alter behavior of
+program to access otherwise restricted information or even inject executable code.
+Pedantic manual checking for boundaries of arrays and dynamically allocated memory objects
+is primary approach to prevent these risks. The information about boundaries of memory objects has
+to be tracked manually. Size of arrays can be determined with <strong>sizeof</strong> operator, but
+after array is converted to pointer e.g. during function call <strong>sizeof</strong> will return size of
+a pointer itself instead of array.</p>
+
+<p>The bounds checking interface Annex K of the <a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf">C11</a> standard defines new set of library
+functions providing alternatives easier to use securely to common parts of
+standard library (such as string and I/O manipulation). There are open-source implementations like
+[the slibc library][slibc], but the interface is not widely adopted yet. BSD based systems (also Mac OS X)
+provide <strong>strlcpy</strong>, <strong>strlcat</strong>  functions for better string manipulation. They are available for
+other system through <a href="http://libbsd.freedesktop.org/wiki/">libbsd library</a>.</p>
+
+<p>Many operating systems provide interface to control access over memory regions to protect memory against
+unintended read/write operations such as <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/mprotect.html">Posix mprotect</a> . These mechanisms usually apply to
+whole memory pages.</p>
+
+<h3>Avoiding Memory Leaks</h3>
+
+<p>Memory leaks are caused by not releasing dynamic memory which is no longer used by program.
+Thus it is essential to truly understand required scope of allocated memory object,
+most importantly the point (or condition) where <strong>free</strong> should be called. While this gets
+more difficult with growing complexity of an application, it is important to think
+about memory management upfront with early design decisions.</p>
+
+<p>Here is a list of general approaches to address this issues:</p>
+
+<h4>1) Allocate on startup</h4>
+
+<p>An example of keeping memory management simple is allocating all required heap memory
+upfront at program startup. Burden of releasing is left for operating system when program ends.
+There are many cases when this solution is satisfactory, in particular for programs which
+process input in one batch and finishes.</p>
+
+<h4>2) Variable Length Arrays</h4>
+
+<p>If you need a temporary storage with variable size and required lifetime is
+within scope of a function consider using VLA (Variable Length Array).
+But there is a limitation; the storage should not be bigger than few hundred bytes per function.
+Because variable Length Arrays specified by C99 (optional in C11) have automatic storage,
+they are bound to same scope as other automatic variables. Even though the standard does not
+explicitly specify that, common way of VLA implementation is putting the memory on stack.
+Maximum size of memory allocated with VLA is <strong>SIZE_MAX</strong> bytes. Being aware of
+<a href="http://www.cs.nyu.edu/exact/core/doc/stackOverflow.txt">stack size</a> of target platforms we have to stay much more humble to make
+sure that program will not have to face stack overflow and possible data corruption in
+following segment of memory.</p>
+
+<h4>3) Manual Reference Counting</h4>
+
+<p>The idea behind this technique is to count each assignment and each loss of reference
+of particular memory object. The count is incremented on every assignment and decremented
+on loss of reference. When reference count reach 0 it means that memory object is
+no longer in use and can be released. Since C does not offer automatic destructor
+(actually, both <em>GCC</em> and <em>Clang</em> support <em>cleanup</em> language extension)
+nor means to override assignment operator, reference counting is done manually by calling
+retain/release functions. Good way of thinking about it, is as various parts of a program
+are taking and releasing ownership of a memory object. Using this method, though,
+require a lot of discipline to not forget calling <strong>release</strong> (will end up with memory leak)
+or calling redundantly (will trigger free early). If required life time of memory object is
+implied by external events and if structure of an application implies handling ownership
+of a memory object anyway, this might be still worth the trouble. Following code block
+contain very simplified reference counting memory manager.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;stdint.h&gt;</span>
+
+<span class="cp">#define MAX_REF_OBJ 100</span>
+<span class="cp">#define RC_ERROR -1</span>
+
+<span class="k">struct</span> <span class="n">mem_obj_t</span><span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+    <span class="n">uint16_t</span> <span class="n">count</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">static</span> <span class="k">struct</span> <span class="n">mem_obj_t</span> <span class="n">references</span><span class="p">[</span><span class="n">MAX_REF_OBJ</span><span class="p">];</span>
+<span class="k">static</span> <span class="n">uint16_t</span> <span class="n">reference_count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="cm">/* create memory object and return handle */</span>
+<span class="n">uint16_t</span> <span class="n">create</span><span class="p">(</span><span class="n">size_t</span> <span class="n">size</span><span class="p">){</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">reference_count</span> <span class="o">&gt;=</span> <span class="n">MAX_REF_OBJ</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">RC_ERROR</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span><span class="p">){</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">ptr</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">){</span>
+            <span class="n">references</span><span class="p">[</span><span class="n">reference_count</span><span class="p">].</span><span class="n">ptr</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">;</span>
+            <span class="n">references</span><span class="p">[</span><span class="n">reference_count</span><span class="p">].</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="k">return</span> <span class="n">reference_count</span><span class="o">++</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">RC_ERROR</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/* get memory object and increment reference counter */</span>
+<span class="kt">void</span><span class="o">*</span> <span class="n">retain</span><span class="p">(</span><span class="n">uint16_t</span> <span class="n">handle</span><span class="p">){</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">handle</span> <span class="o">&lt;</span> <span class="n">reference_count</span> <span class="o">&amp;&amp;</span> <span class="n">handle</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">){</span>
+        <span class="n">references</span><span class="p">[</span><span class="n">handle</span><span class="p">].</span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">references</span><span class="p">[</span><span class="n">handle</span><span class="p">].</span><span class="n">ptr</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cm">/* decrement reference counter */</span>
+<span class="kt">void</span> <span class="n">release</span><span class="p">(</span><span class="n">uint16_t</span> <span class="n">handle</span><span class="p">){</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"release</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">handle</span> <span class="o">&lt;</span> <span class="n">reference_count</span> <span class="o">&amp;&amp;</span> <span class="n">handle</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">){</span>
+        <span class="k">struct</span> <span class="n">mem_obj_t</span> <span class="o">*</span><span class="n">object</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">references</span><span class="p">[</span><span class="n">handle</span><span class="p">];</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">object</span><span class="o">-&gt;</span><span class="n">count</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">){</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"released</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+            <span class="n">free</span><span class="p">(</span><span class="n">object</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+            <span class="n">reference_count</span><span class="o">--</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"decremented</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+            <span class="n">object</span><span class="o">-&gt;</span><span class="n">count</span><span class="o">--</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>If you do not care about about compatibility with various compilers, it is
+possible to use <strong>cleanup</strong> <em>attribute</em> to mimic automatic destructor in C.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">void</span> <span class="n">cleanup_release</span><span class="p">(</span><span class="kt">void</span><span class="o">**</span> <span class="n">pmem</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+    <span class="k">for</span><span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">reference_count</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span><span class="p">(</span><span class="n">references</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">ptr</span> <span class="o">==</span> <span class="o">*</span><span class="n">pmem</span><span class="p">)</span>
+           <span class="n">release</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">usage</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">int16_t</span> <span class="n">ref</span> <span class="o">=</span> <span class="n">create</span><span class="p">(</span><span class="mi">64</span><span class="p">);</span>
+
+    <span class="kt">void</span> <span class="o">*</span><span class="n">mem</span> <span class="o">=</span> <span class="n">retain</span><span class="p">(</span><span class="n">ref</span><span class="p">);</span>
+    <span class="n">__attribute__</span><span class="p">((</span><span class="n">cleanup</span><span class="p">(</span><span class="n">cleanup_release</span><span class="p">),</span> <span class="n">mem</span><span class="p">));</span>
+
+    <span class="cm">/* ... */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Another deficiency in above solution is that <strong>cleanup_release</strong> is provided
+with address of object to be released instaed of reference number. Therefore
+<strong>cleanup_release</strong> have to do costly lookup in <strong>references</strong> array. One way
+to fix this is to change interface of retain to return pointer to
+<strong>struct mem_obj_t</strong>. Another way is to use following set of macros which crate
+variable to hold reference number and attach <strong>cleanup</strong> attribute to it.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* helper macros */</span>
+<span class="cp">#define __COMB(X,Y) X##Y</span>
+<span class="cp">#define COMB(X,Y) __COMB(X,Y)</span>
+<span class="cp">#define __CLEANUP_RELEASE __attribute__((cleanup(cleanup_release)))</span>
+
+<span class="cp">#define retain_auto(REF) retain(REF); int16_t __CLEANUP_RELEASE COMB(__ref,__LINE__) = REF</span>
+
+<span class="kt">void</span> <span class="n">cleanup_release</span><span class="p">(</span><span class="n">int16_t</span><span class="o">*</span> <span class="n">phd</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">release</span><span class="p">(</span><span class="o">*</span><span class="n">phd</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">usage</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">int16_t</span> <span class="n">ref</span> <span class="o">=</span> <span class="n">create</span><span class="p">(</span><span class="mi">64</span><span class="p">);</span>
+
+    <span class="kt">void</span> <span class="o">*</span><span class="n">mem</span> <span class="o">=</span> <span class="n">retain_auto</span><span class="p">(</span><span class="n">ref</span><span class="p">);</span>
+    <span class="cm">/* ... */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<h4>4) Memory Pools</h4>
+
+<p>If a program goes during its execution thorough several stages, each stage might
+have pool of memory which is allocated at start of a stage. Whenever program
+need to allocate memory, part of one of memory pools is used. Memory pool
+is chosen according to required lifetime of allocated memory object and belonging
+to specific stage of a program. Upon end of each stage whole pool is released at once.
+This approach is particularly useful with log running processes such as daemons,
+where it may help to reduce fragmentation of memory over time. Here is very
+minimalistic demonstration of a memory pool memory manager:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;stdint.h&gt;</span>
+
+<span class="k">struct</span> <span class="n">pool_t</span><span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+    <span class="n">size_t</span> <span class="n">size</span><span class="p">;</span>
+    <span class="n">size_t</span> <span class="n">used</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="cm">/* create memory pool*/</span>
+<span class="k">struct</span> <span class="n">pool_t</span><span class="o">*</span> <span class="n">create_pool</span><span class="p">(</span><span class="n">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">pool_t</span><span class="o">*</span> <span class="n">pool</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">pool_t</span><span class="p">));</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">pool</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">mem</span> <span class="o">=</span> <span class="n">calloc</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">mem</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">pool</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">=</span> <span class="n">mem</span><span class="p">;</span>
+            <span class="n">pool</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span><span class="p">;</span>
+            <span class="n">pool</span><span class="o">-&gt;</span><span class="n">used</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="k">return</span> <span class="n">pool</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/* allocate memory from memory pool */</span>
+<span class="kt">void</span><span class="o">*</span> <span class="n">pool_alloc</span><span class="p">(</span><span class="k">struct</span> <span class="n">pool_t</span><span class="o">*</span> <span class="n">pool</span><span class="p">,</span> <span class="n">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">pool</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">size_t</span> <span class="n">avail_size</span> <span class="o">=</span> <span class="n">pool</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">-</span> <span class="n">pool</span><span class="o">-&gt;</span><span class="n">used</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">&amp;&amp;</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="n">avail_size</span><span class="p">){</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">mem</span> <span class="o">=</span> <span class="n">pool</span><span class="o">-&gt;</span><span class="n">ptr</span> <span class="o">+</span> <span class="n">pool</span><span class="o">-&gt;</span><span class="n">used</span><span class="p">;</span>
+        <span class="n">pool</span><span class="o">-&gt;</span><span class="n">used</span> <span class="o">+=</span> <span class="n">size</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">mem</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/* release memory for whole pool */</span>
+<span class="kt">void</span> <span class="n">delete_pool</span><span class="p">(</span><span class="k">struct</span> <span class="n">pool_t</span><span class="o">*</span> <span class="n">pool</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pool</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">free</span><span class="p">(</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+        <span class="n">free</span><span class="p">(</span><span class="n">pool</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Implementation of memory pool can range into very difficult task.
+Maybe some of existing libraries will be good fit for your requirements:</p>
+
+<ul>
+<li><a href="http://gcc.gnu.org/onlinedocs/libiberty/Obstacks.html">GNU libc obstack</a></li>
+<li><a href="http://talloc.samba.org/talloc/doc/html/index.html">Samba talloc</a></li>
+<li><a href="http://www.ravenbrook.com/project/mps/">Ravenbrook Memory Pool System</a></li>
+</ul>
+
+
+<h4>5) Data Structures</h4>
+
+<p>Many memory management problems can be solved by storing data in right data structure.
+While the choice of data structure is implied mostly by needs of algorithms
+accessing data, keeping data in structures like linked lists, hash-maps or trees have
+additional benefit e.g. being able to traverse data structure and release data at once.
+Since there is no support for data structures in standard library, here is a list of few libraries:</p>
+
+<ul>
+<li>For traditional Unix implementation of linked lists and trees see BSD's
+queue.h and tree.h macros both are part of libbsd.</li>
+<li>GNU <a href="http://savannah.gnu.org/projects/avl">libavl</a></li>
+<li><a href="https://developer.gnome.org/glib/stable/glib-data-types.html">Glib Data Types</a></li>
+<li>For additional list see <a href="http://adtinfo.org/index.html">http://adtinfo.org/index.html</a></li>
+</ul>
+
+
+<h4>6) Mark and Sweep Garbage Collector</h4>
+
+<p>Another approach is to use advantage of automatic garbage collector and relieve
+from need to release memory manually. In contrary to reference counting where
+memory is released when is not needed anymore, garbage collector is invoked upon
+specific event e.g. failed allocation or after allocated memory reach certain
+water marks. Mark and sweep algorithm is one way to implement garbage
+collector. It first traverses heap memory for any references to allocated memory objects
+and mark those which are still reachable, than it sweeps those which were not marked.</p>
+
+<p>Perhaps most known implementation of such garbage collector in C is <a href="http://www.hpl.hp.com/personal/Hans_Boehm/gc/">Boehm-Demers-Weiser
+conservative garbage collector</a>. Drawbacks of using garbage collection might be
+performance overhead or introducing non-deterministic stalls to a program.
+Another problem would cause library functions using <strong>malloc</strong>, which memory will
+not be managed by garbage collector and must be managed manually.</p>
+
+<p>While unpredictable stalls are unacceptable for real-time environments there are many
+environments where benefits outweigh drawbacks. On performance side there are even
+claims of <a href="http://www.drdobbs.com/the-boehm-collector-for-c-and-c/184401632">performance increase</a>. Projects using Boehm GC include
+Mono project GNU Objective C runtime or Irssi IRC client.</p>
+
+<h2>Pointers and Arrays</h2>
+
+<p>Although there are contexts where arrays and pointers are interchangeable,
+they are threated differently by compiler and are represented differently at runtime.</p>
+
+<p>When we say that object or expression has some <em>type</em> we usually have on mind the <strong>type</strong>
+of <em>locator value</em> also called <em>lvalue</em> . When <em>lvalue</em> has a complete <em>non-const</em> type,
+which is not an array type, we call it <em>modifiable lvalue</em> and it is a value, which gets
+modified when expression is left argument of assignment operator. If expression is right
+side argument of assignment operator, than the value doesn't have to be modifiable and become
+<em>value of an expression</em> by which is left argument modified. If expression has array type,
+<em>value of an expression</em> is pointer to the first element of array.</p>
+
+<p>That is how array become a pointer under most contexts. Array's value type is not converted
+in two cases, when it is operand of unary <strong>&amp;</strong> (address of) or <strong>sizeof</strong> operator.
+According to <a href="http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1256.pdf">C99</a>/<a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf">C11</a> standard section 6.3.2.1:</p>
+
+<p><em>Except when it is the operand of the sizeof operator or the unary &amp; operator, or is a
+string literal used to initialize an array, an expression that has type "array of type" is
+converted to an expression with type "pointer to type" that points to the initial element of
+the array object and is not an lvalue.</em></p>
+
+<p>Since array does not have <em>modifiable lvalue</em> and value <em>value of an expression</em> of array type is
+in most cases a pointer, it is not possible to use assign operator to assign value to array.
+Here is a little demonstration:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">short</span> <span class="n">a</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">};</span>
+<span class="kt">short</span> <span class="o">*</span><span class="n">pa</span><span class="p">;</span>
+<span class="kt">short</span> <span class="p">(</span><span class="o">*</span><span class="n">px</span><span class="p">)[];</span>
+
+<span class="kt">void</span> <span class="n">init</span><span class="p">(){</span>
+    <span class="n">pa</span> <span class="o">=</span> <span class="n">a</span><span class="p">;</span>
+    <span class="n">px</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">a</span><span class="p">;</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"a:%p; pa:%p; px:%p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">pa</span><span class="p">,</span> <span class="n">px</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"a[1]:%i; pa[1]:%i (*px)[1]:%i</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">pa</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="o">*</span><span class="n">px</span><span class="p">)[</span><span class="mi">1</span><span class="p">]);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p><strong>a</strong> is array of <strong>int</strong>, <strong>pa</strong> is pointer to <strong>int</strong> and <strong>px</strong> has incomplete type of array of type <strong>int</strong>.
+Before <strong>a</strong> is assigned to <strong>pa</strong> it's value is converted to pointer to <strong>int</strong> pointing at the beginning
+of array. <strong>rvalue</strong> of expression <strong>&amp;a</strong> is not pointer to <strong>int</strong>, but pointer to array of type <strong>int</strong>
+because <strong>lvalue</strong> was not converted before application of unary <strong>&amp;</strong> operator.</p>
+
+<p>Application of subscript operator in expression <strong>a[1]</strong> is equivalent to <strong>*(a+1)</strong> and obeys
+rules of pointer arithmetics in same way as in <strong>pa[1]</strong> expression. But there is one
+important distinction. With <strong>a</strong>, which is an array, the actual memory location of <strong>a</strong>
+variable it self is used to obtain pointer to first element. While with <strong>pa</strong>, which is a pointer,
+the actual value of <strong>pa</strong> variable is used not the location. The compiler have to be very
+aware of type difference between <strong>a</strong> and <strong>pa</strong>, therefore it is important to use
+right type for declarations of exported variables.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">a</span><span class="p">[];</span>
+<span class="kt">int</span> <span class="o">*</span><span class="n">pa</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>While using following declarations in anoter compilation unit is incorrect  and
+will break the code:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="k">extern</span> <span class="kt">int</span> <span class="o">*</span><span class="n">a</span><span class="p">;</span>
+<span class="k">extern</span> <span class="kt">int</span> <span class="n">pa</span><span class="p">[];</span>
+</code></pre></div>
+
+
+<h3>Array as Argument of a Function</h3>
+
+<p>Another place when arrays of some type become pointers to that type is declaration of
+function parameters. All three following function definitions are equivalent.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="n">data</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span> <span class="p">{}</span>
+
+<span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="n">data</span><span class="p">[])</span> <span class="p">{}</span>
+
+<span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="n">data</span><span class="p">)</span> <span class="p">{}</span>
+</code></pre></div>
+
+
+<p>The compiler shall report an error about redefinition of function <strong>sum</strong>, because in all three
+cases compiler see its parameter as <strong>int</strong>.</p>
+
+<p>Multi-dimensional arrays are bit trickier topic though. First of all C does
+not exactly support multi-dimensional arrays, even though literature even the standard
+use that term. Array of array would be perhaps more accurate name.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="k">typedef</span> <span class="kt">int</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="n">vector</span><span class="p">;</span>
+<span class="n">vector</span> <span class="n">m</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">{{</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">},</span> <span class="p">{</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">}};</span>
+<span class="kt">int</span> <span class="n">n</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{{</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">},</span> <span class="p">{</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">}};</span>
+</code></pre></div>
+
+
+<p>Variable <strong>m</strong> is array of <strong>vector</strong> type with size 2 and <strong>vector</strong> is array of <strong>int</strong> type with size 4.
+Array <strong>n</strong> is identical to <strong>m</strong> apart from fact that they are stored different palace in memory.
+Speaking of memory, both arrays are laid out in continuous memory area just like nested bracket
+expressions show. Accessing such array works exactly as stated above.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+<span class="kt">int</span> <span class="n">y</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>By applying subscript operator <strong>n[1]</strong> we get element with type <em>array of int</em> with size of four.
+Because we are addressing second element of array, location within array would be four times
+size of int from beginning of array. As we know <em>array of int</em> is in expression such as one above
+converted to <em>pointer to int</em> and then stored as <strong>p</strong>. Then <strong>p[2]</strong> will access third element
+of array produced by previous expression. Equivalent expression written with pointer arithmetic
+would be following:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">z</span> <span class="o">=</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">+</span><span class="mi">2</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>Which has same effect as expression we would write in first place:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">2</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>When passing such array as argument, first "dimension" array will be converted
+to the pointer to first element of array which is again array. Thus it is not
+required to specify first dimension. Following dimensions of array must be
+exactly expressed. Otherwise subscripting array would not work correctly.
+While we have freedom to use any of following forms do define function
+receiving array as argument, we are always forced to explicitly define
+dimensions of inner array.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="n">data</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="mi">4</span><span class="p">])</span> <span class="p">{}</span>
+
+<span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="n">data</span><span class="p">[][</span><span class="mi">4</span><span class="p">])</span> <span class="p">{}</span>
+
+<span class="kt">void</span> <span class="n">sum</span><span class="p">(</span><span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">data</span><span class="p">)[</span><span class="mi">4</span><span class="p">])</span> <span class="p">{}</span>
+</code></pre></div>
+
+
+<p>To get around this limitation it is possible to cast the array to pointer and
+calculate offset of required element.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">void</span> <span class="n">list</span><span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="n">arr</span><span class="p">,</span> <span class="kt">int</span> <span class="n">max_i</span><span class="p">,</span> <span class="kt">int</span> <span class="n">max_j</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">;</span>
+
+    <span class="k">for</span><span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="n">max_i</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">){</span>
+
+        <span class="k">for</span><span class="p">(</span><span class="n">j</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">j</span><span class="o">&lt;</span><span class="n">max_j</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">){</span>
+            <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="n">arr</span><span class="p">[</span><span class="n">max_i</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="n">j</span><span class="p">];</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"%i, "</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Another approach is used by main function to pass list of arguments. The main function
+receives pointer to pointer instead of array of arrays. Drawback of this approach is
+that the data must be constructed differently or converted to pointer to pointer form.
+On the upside it will allow us to use subscript operator in same way as before, because
+now we have address of beginnings for each sub-array.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">arr1</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">};</span>
+    <span class="kt">int</span> <span class="n">arr2</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">,</span><span class="mi">8</span><span class="p">};</span>
+
+    <span class="kt">int</span> <span class="o">*</span><span class="n">arr</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span><span class="n">arr1</span><span class="p">,</span> <span class="n">arr2</span><span class="p">};</span>
+
+    <span class="n">list</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="n">list</span><span class="p">(</span><span class="kt">int</span> <span class="o">**</span><span class="n">arr</span><span class="p">,</span> <span class="kt">int</span> <span class="n">max_i</span><span class="p">,</span> <span class="kt">int</span> <span class="n">max_j</span><span class="p">){</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">;</span>
+
+    <span class="k">for</span><span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span><span class="o">&lt;</span><span class="n">max_i</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">){</span>
+
+        <span class="k">for</span><span class="p">(</span><span class="n">j</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">j</span><span class="o">&lt;</span><span class="n">max_j</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">){</span>
+            <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="n">arr</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">j</span><span class="p">];</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"%i, "</span><span class="p">,</span> <span class="n">x</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Initializations part gets much simpler with strings, since it is allowed to
+initialize pointers to strings constant directly.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">strings</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">"one"</span><span class="p">,</span>
+    <span class="s">"two"</span><span class="p">,</span>
+    <span class="s">"three"</span>
+<span class="p">};</span>
+</code></pre></div>
+
+
+<p>But there is a pitfall. String constants were converted to pointers <strong>sizeof</strong> operator
+will give size of pointer and not size of whole string literals. Another important distinction is that
+if string literal is modified directly through a pointer behavior of such program is undefined.</p>
+
+<p>Providing you can get away with using variable length arrays there is a third way pass
+multidimensional array to function. Using previously defined parameters to designate
+dimensions of inner array, the <strong>arr</strong> parameter become pointer to complete type of array to int.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">void</span> <span class="n">list</span><span class="p">(</span><span class="kt">int</span> <span class="n">max_i</span><span class="p">,</span> <span class="kt">int</span> <span class="n">max_j</span><span class="p">,</span> <span class="kt">int</span> <span class="n">arr</span><span class="p">[][</span><span class="n">max_j</span><span class="p">]){</span>
+    <span class="cm">/* ... */</span>
+    <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="n">arr</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">3</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Same approach works also for higher dimension arrays, while first dimension is always
+converted to pointer to array. Similar conversion rule works for function designators.
+If function designator is not argument of <strong>sizeof</strong> or unary <strong>&amp;</strong> operator its value is
+converted to pointer to function. That is the reason why we do not have to use <strong>&amp;</strong> operator
+when passing callback function.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="k">static</span> <span class="kt">void</span> <span class="n">catch_int</span><span class="p">(</span><span class="kt">int</span> <span class="n">no</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* ... */</span>
+<span class="p">};</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">catch_int</span><span class="p">);</span>
+
+    <span class="cm">/* ... */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<h2>Interpositioning</h2>
+
+<p>Interpositioning is technique of replacing function in linked libraries with custom implementation
+without recompiling them. It is even possible to interposition syscalls (more
+precisely functions of library wrapping syscalls). Possible applications are sandboxing,
+debugging or performance enhancement libraries. For demonstration here is a simple library
+counting <strong>malloc</strong> calls for GNU/Linux.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* _GNU_SOURCE is needed for RTLD_NEXT, GCC will not define it by default */</span>
+<span class="cp">#define _GNU_SOURCE</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;dlfcn.h&gt;</span>
+<span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;inttypes.h&gt;</span>
+
+<span class="k">static</span> <span class="n">uint32_t</span> <span class="n">malloc_count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="k">static</span> <span class="n">uint64_t</span> <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="n">summary</span><span class="p">(){</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"malloc called: %u times</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"total allocated memory: %"</span> <span class="n">PRIu64</span> <span class="s">" bytes</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">total</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="o">*</span><span class="n">malloc</span><span class="p">(</span><span class="n">size_t</span> <span class="n">size</span><span class="p">){</span>
+    <span class="k">static</span> <span class="kt">void</span><span class="o">*</span> <span class="p">(</span><span class="o">*</span><span class="n">real_malloc</span><span class="p">)(</span><span class="n">size_t</span><span class="p">)</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span><span class="p">(</span><span class="n">real_malloc</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">){</span>
+        <span class="n">real_malloc</span> <span class="o">=</span> <span class="n">dlsym</span><span class="p">(</span><span class="n">RTLD_NEXT</span><span class="p">,</span> <span class="s">"malloc"</span><span class="p">);</span>
+        <span class="n">atexit</span><span class="p">(</span><span class="n">summary</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">count</span><span class="o">++</span><span class="p">;</span>
+    <span class="n">total</span> <span class="o">+=</span> <span class="n">size</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="n">real_malloc</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>The intention is to load this library during dynamic linking before <em>libc.so</em>, so our
+implementation of <strong>malloc</strong> will be linked when binary is run. This can be achieved setting
+<strong>LD_PRELOAD</strong> environment variable to full path to the libraries we want to load first.
+It will also ensure that calls made from another dynamically linked libraries will also
+end up calling our implementation of <strong>malloc</strong>. Since our objective is only to count calls not
+actually implement allocation we still need to call the "real" <strong>malloc</strong>. By passing
+<strong>RTLD_NEXT</strong> pseudo-handler to <strong>dlsym</strong> we obtain pointer to next occurrence of <strong>malloc</strong> among remaining
+dynamically linked libraries. First time <strong>malloc</strong> is called <em>libc</em> implementation of <strong>malloc</strong> is
+obtained and <strong>summary</strong> function is registered to be called on program termination with <strong>atexit</strong>.
+To see interpositioning in action on GNU/Linux (really 184 times!):</p>
+
+<div class="highlight"><pre><code class="text">$ gcc -shared -ldl -fPIC malloc_counter.c -o /tmp/libmcnt.so
+$ export LD_PRELOAD="/tmp/libstr.so"
+$ ps
+  PID TTY          TIME CMD
+ 2758 pts/2    00:00:00 bash
+ 4371 pts/2    00:00:00 ps
+malloc called: 184 times
+total allocated memory: 302599 bytes
+</code></pre></div>
+
+
+<h3>Symbol Visibility</h3>
+
+<p>Because all <em>non-static</em> functions are exported by default, interpositioning can be achieved
+unintentionally just by defining function with same signature as other dynamically linked library
+function or even object file. Effective practice to prevent accidental interpositioning and
+polluting exported function name space is to define every function as <strong>static</strong>, providing it
+is not be used behind boundary of object file.</p>
+
+<p>Another possibility to control exporting shared object in shared libraries is to use compiler
+extensions. Both GCC 4.x and Clang support <strong>visibility</strong> attribute to and <strong>-fvisibility</strong> compiler
+argument for setting global policy per object file. Where <strong>default</strong> mean no modification
+of visibility and <strong>hidden</strong> has similar effect on visibility as using <strong>static</strong>.
+The symbol will not be placed into the dynamic symbol table, so it would not be visible
+for other shared objects or executable.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#if __GNUC__ &gt;= 4 || __clang__</span>
+  <span class="err">#</span><span class="n">define</span> <span class="n">EXPORT_SYMBOL</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">visibility</span> <span class="p">(</span><span class="s">"default"</span><span class="p">)))</span>
+  <span class="err">#</span><span class="n">define</span> <span class="n">LOCAL_SYMBOL</span>  <span class="n">__attribute__</span> <span class="p">((</span><span class="n">visibility</span> <span class="p">(</span><span class="s">"hidden"</span><span class="p">)))</span>
+<span class="cp">#else</span>
+  <span class="err">#</span><span class="n">define</span> <span class="n">EXPORT_SYMBOL</span>
+  <span class="err">#</span><span class="n">define</span> <span class="n">LOCAL_SYMBOL</span>
+<span class="cp">#endif</span>
+</code></pre></div>
+
+
+<p>Global visibility designated by compiler argument can be overridden locally by setting <strong>visibility</strong>
+attribute. In practice global policy is set to <strong>hidden</strong>, so all symbols will be by default local
+and only those which has <strong>__attribute__</strong> <strong>((visibility ("default")))</strong> will be exported.</p>
+
+<h2>Explicit Inlining</h2>
+
+<p>The code of a function can be directly integrated into caller function instead of
+generating code of stand-alone function object and a call. The compiler can be instructed
+to do so explicitly by using <strong>inline</strong> specifier. According to <a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf">section 6.7.4 of C standard</a>
+<strong>inline</strong> specifier only suggest the compiler to make "calls to the function be
+as fast as possible" and that "the extent to which such suggestions are effective is
+implementation-defined".</p>
+
+<p>The simplest way to use the advantage of <em>inline functions</em> is to define function as <strong>static</strong> and place
+the definition into header.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* middle.h */</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">middle</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">){</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">b</span><span class="o">-</span><span class="n">a</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Stand-alone function object of the function still might be emitted, but it will not be visible
+outside of translation unit. Providing such header is included in multiple translation units,
+the compiler might emit multiple copies of the function for each unit. Thus it is possible
+that two variables caring pointers to same function name may not be equal.</p>
+
+<p>Another approach is to provide both externally linkable and inline version of a same function
+and let the complier to decide which will be used. That actually is how <em>inline</em> specifier is
+defined:</p>
+
+<p><em>If all of the file scope declarations for a function in a translation unit include the inline function
+specifier without extern, then the definition in that translation unit is an inline
+definition. An inline definition does not provide an external definition for the function,
+and does not forbid an external definition in another translation unit. An inline definition
+provides an alternative to an external definition, which a translator may use to implement
+any call to the function in the same translation unit. It is unspecified whether a call to the
+function uses the inline definition or the external definition.</em></p>
+
+<p>For having both versions of a function we could place following definition in header:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* middle.h */</span>
+<span class="kr">inline</span> <span class="kt">int</span> <span class="n">middle</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">){</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">b</span><span class="o">-</span><span class="n">a</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>Then in exactly one source file declare the function with <em>extern</em> specifier to emit
+externally likable version in this translation unit:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include "middle.h"</span>
+<span class="k">extern</span> <span class="kt">int</span> <span class="n">middle</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">);</span>
+</code></pre></div>
+
+
+<p>The GCC compiler implementation differs from this decryption.
+If a function defined with <strong>inline</strong> specifier, the GCC always emits externally
+linkable object code and only one such definition may exist in the program. If
+function is defined with both <em>export inline</em> specifiers GCC implementation will
+never emit externally linkable object code for that function. Since GCC version 4.3
+it is possible to use -std=c99 option to enable C99 rules for <em>inline defintions</em>
+If C99 rules are enabled <strong><strong>GNUC_STDC_INLINE</strong></strong> is defined. Formerly described
+approach using <strong>static</strong> is not affected by GCC interpretation of <em>inline functions</em>.
+If you need to use approach with both inline and externally linkable function consider
+following solution:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* global.h */</span>
+<span class="cp">#ifndef INLINE</span>
+<span class="cp"># if __GNUC__ &amp;&amp; !__GNUC_STDC_INLINE__</span>
+<span class="cp">#  define INLINE extern inline</span>
+<span class="cp"># else</span>
+<span class="cp">#  define INLINE inline</span>
+<span class="cp"># endif</span>
+<span class="cp">#endif</span>
+</code></pre></div>
+
+
+<p>In header with function definition</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* middle.h  */</span>
+<span class="cp">#include "global.h"</span>
+<span class="n">INLINE</span> <span class="kt">int</span> <span class="n">middle</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="p">(</span><span class="n">b</span><span class="o">-</span><span class="n">a</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>In exactly one source file:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#define INLINE</span>
+<span class="cp">#include "middle.h</span>
+</code></pre></div>
+
+
+<p>When function inlining have to be enforced both, GCC and Clang compilers support
+<strong>always_inline</strong> attribute for that purpose. In following example stand-alone
+function object is never emitted.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* cdefs.h */</span>
+<span class="cp"># define __always_inline   inline __attribute__((always_inline))</span>
+
+<span class="cm">/* middle.h */</span>
+<span class="cp">#include &lt;cdefs.h&gt;</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">middle</span><span class="p">(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="p">(</span><span class="n">b</span><span class="o">-</span><span class="n">a</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>In case compiler fail to inline function, compilation will end up with error. This
+approach is for instance used in <a href="https://www.kernel.org/doc/local/inline.html">Linux kernel</a> The definition of <strong>__always_inline</strong>
+used above can be found in cdefs.h.</p>
+
+<h2>Vector Extensions</h2>
+
+<p>Many microprocessors (x86 architecture in particular) provide Single-Instruction-Multiple-Data (SIMD)
+instruction sets enabling vector operations. To illustrate that, consider following code:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;string.h&gt;</span>
+<span class="cp">#define SIZE 8</span>
+<span class="n">int16_t</span> <span class="n">a</span><span class="p">[</span><span class="n">SIZE</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="n">SIZE</span><span class="p">];</span>
+
+<span class="kt">void</span> <span class="n">addtwo</span><span class="p">(){</span>
+    <span class="n">int16_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">while</span> <span class="p">(</span><span class="n">i</span> <span class="o">&lt;</span> <span class="n">SIZE</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="n">i</span><span class="o">++</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="n">addtwo</span><span class="p">();</span>
+    <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>The loop in function <strong>addtwo</strong> iterate 8 times each time adding two to array <em>b</em> with type of signed integers with size of
+16 bits. For function <strong>addtwo</strong> will complier output following (or similar) assembly code:</p>
+
+<div class="highlight"><pre><code class="text">$ gcc -O2 auto.c -S -o auto_no.asm
+</code></pre></div>
+
+
+
+
+<div class="highlight"><pre><code class="nasm"><span class="nl">addtwo:</span>
+<span class="nl">.LFB22:</span>
+        <span class="nf">.cfi_startproc</span>
+        <span class="nf">movl</span>    <span class="kc">$</span><span class="mi">0</span><span class="p">,</span> <span class="o">%</span><span class="nb">eax</span>
+<span class="nl">.L2:</span>
+        <span class="nf">movzwl</span>  <span class="nv">b</span><span class="p">(</span><span class="o">%</span><span class="nb">rax</span><span class="p">),</span> <span class="o">%</span><span class="nb">edx</span>
+        <span class="nf">addl</span>    <span class="kc">$</span><span class="mi">2</span><span class="p">,</span> <span class="o">%</span><span class="nb">edx</span>
+        <span class="nf">movw</span>    <span class="o">%</span><span class="nb">dx</span><span class="p">,</span> <span class="nv">a</span><span class="p">(</span><span class="o">%</span><span class="nb">rax</span><span class="p">)</span>
+        <span class="nf">addq</span>    <span class="kc">$</span><span class="mi">2</span><span class="p">,</span> <span class="o">%</span><span class="nb">rax</span>
+        <span class="nf">cmpq</span>    <span class="kc">$</span><span class="mi">16</span><span class="p">,</span> <span class="o">%</span><span class="nb">rax</span>
+        <span class="nf">jne</span>     <span class="nv">.L2</span>
+        <span class="nf">rep</span>
+        <span class="nf">ret</span>
+        <span class="nf">.cfi_endproc</span>
+</code></pre></div>
+
+
+<p>First a zero is written to <em>eax</em> register. The label <strong>L2</strong> marks start of loop. Fist element of <strong>b</strong> is
+loaded into first 16 bits of 32-bit <strong>edx</strong> register by <strong>movzwl</strong> instruction.
+Rest of the <strong>edx</strong> register is filled with zeros. Then <strong>addl</strong> instruction
+add two to first element of <strong>a</strong> to value in <strong>edx</strong> register  and store it in <em>dx</em>
+register. Result of summation copied from <em>dx</em> (lower 16 bits of <strong>edx</strong> register)
+to first element of <strong>a</strong>.  Finally <strong>rax</strong> register which apparently holds offset
+for array arithmetics is incremented by 2 (representing 2 bytes - 16bits) and compared
+with total size of array (in bytes). If <em>rax</em> does not equal 16 execution jumps back to <strong>L2</strong> label,
+otherwise execution continues and function returns.</p>
+
+<p>The SSE2 instruction set provide instruction <strong>paddw</strong> which can add eight 16-bit integers at once.
+In fact most modern compliers are able to optimize code to use vector instructions such as
+<strong>paddw</strong> automatically. <a href="http://llvm.org/docs/Vectorizers.html">The Clang</a> has automatic vectorization enabled by default.
+<a href="http://gcc.gnu.org/projects/tree-ssa/vectorization.html">The GCC</a> complier has <em>-ftree-vectorize</em> switch or it is enabled with <em>-O3</em> switch.
+Assembly code of <strong>addtwo</strong> function optimized for vector instructions would then look very different:</p>
+
+<div class="highlight"><pre><code class="text">$ gcc -O2 -msse -msse2 -ftree-vectorize -ftree-vectorizer-verbose=5 auto.c -S -o auto.asm
+</code></pre></div>
+
+
+
+
+<div class="highlight"><pre><code class="nasm"><span class="nl">addtwo:</span>
+<span class="nl">.LFB22:</span>
+        <span class="nf">.cfi_startproc</span>
+        <span class="nf">movdqa</span>  <span class="nv">.LC0</span><span class="p">(</span><span class="o">%</span><span class="nv">rip</span><span class="p">),</span> <span class="o">%</span><span class="nv">xmm0</span>
+        <span class="nf">paddw</span>   <span class="nv">b</span><span class="p">(</span><span class="o">%</span><span class="nv">rip</span><span class="p">),</span> <span class="o">%</span><span class="nv">xmm0</span>
+        <span class="nf">movdqa</span>  <span class="o">%</span><span class="nv">xmm0</span><span class="p">,</span> <span class="nv">a</span><span class="p">(</span><span class="o">%</span><span class="nv">rip</span><span class="p">)</span>
+        <span class="nf">ret</span>
+        <span class="nf">.cfi_endproc</span>
+
+<span class="c1">;...</span>
+
+<span class="nl">.LC0:</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+        <span class="nf">.value</span>  <span class="mi">2</span>
+</code></pre></div>
+
+
+<p>Most notable difference is that code handling the loop vanished. First eight 16-bits
+integer with value 2 labeled <em>LC0</em> are loaded by <strong>movdqa</strong> to <strong>xmm0</strong> register.
+Then <strong>paddw</strong> add each of eight 16-bit elements of <strong>b</strong> by appropriate element stored in
+<strong>xmm0</strong>. The result is written back to <em>a</em> and function may return. Instruction <strong>movqda</strong>
+can be used only on memory object aligned by 16 bytes. It indicates that compiler
+was able to align memory addresses of both arrays for better efficiency.</p>
+
+<p>The size of array does not have to be exactly 8 elements, but it has to be aligned
+(or padded if necessary) to 16 bytes so 128-bit vector can be used. It also might be
+a good idea to inline function, especially when arrays are passed as arguments. Because
+arrays are converted into pointers, the addresses need to be aligned by 16 bytes. If
+the function is inlined the compiler might be able to reduce overhead of additional
+aligning.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdint.h&gt;</span>
+
+<span class="kt">void</span> <span class="n">__always_inline</span> <span class="n">addtwo</span><span class="p">(</span><span class="n">int16_t</span><span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="n">int16_t</span> <span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">int16_t</span> <span class="n">size</span><span class="p">){</span>
+    <span class="n">int16_t</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="k">const</span> <span class="n">int16_t</span> <span class="n">size</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">;</span>
+    <span class="n">int16_t</span> <span class="n">a</span><span class="p">[</span><span class="n">size</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="n">size</span><span class="p">];</span>
+
+    <span class="n">addtwo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>The loop iterate 1024 each time adding two signed integers with size of 16 bits.
+Thus, applying vector operations, the count of loop iterations in this example can be
+reduced to 128. While this can be done also automatically, with GCC it is also possible
+to define vector data types with <strong><strong>vector_size</strong></strong> attribute and by using them instruct
+compiler to use vector extensions explicitly. For illustration here are various vector data
+types introduced with SSE2 instruction set defined in <em>emmintrin.h</em> header.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cm">/* SSE2 */</span>
+<span class="k">typedef</span> <span class="kt">double</span> <span class="n">__v2df</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">__vector_size__</span> <span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+<span class="k">typedef</span> <span class="kt">long</span> <span class="kt">long</span> <span class="n">__v2di</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">__vector_size__</span> <span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+<span class="k">typedef</span> <span class="kt">int</span> <span class="n">__v4si</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">__vector_size__</span> <span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+<span class="k">typedef</span> <span class="kt">short</span> <span class="n">__v8hi</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">__vector_size__</span> <span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+<span class="k">typedef</span> <span class="kt">char</span> <span class="n">__v16qi</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">__vector_size__</span> <span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+</code></pre></div>
+
+
+<p>And here is how previous example can be optimized to use vector instructions using
+<em>__v8hi</em> type.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;string.h&gt;</span>
+<span class="cp">#include &lt;emmintrin.h&gt;</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">__always_inline</span> <span class="n">_addtwo</span><span class="p">(</span><span class="n">__v8hi</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="n">__v8hi</span> <span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="n">int16_t</span> <span class="n">sz</span><span class="p">){</span>
+    <span class="n">__v8hi</span> <span class="n">c</span> <span class="o">=</span> <span class="p">{</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">};</span>
+
+    <span class="n">int16_t</span> <span class="n">i</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">sz</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="n">c</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">__always_inline</span> <span class="n">addtwo</span><span class="p">(</span><span class="n">int16_t</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="n">int16_t</span> <span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="k">const</span> <span class="n">int16_t</span> <span class="n">sz</span><span class="p">){</span>
+    <span class="n">_addtwo</span><span class="p">((</span><span class="n">__v8hi</span> <span class="o">*</span><span class="p">)</span> <span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">__v8hi</span> <span class="o">*</span><span class="p">)</span> <span class="n">b</span><span class="p">,</span> <span class="n">sz</span><span class="o">/</span><span class="mi">8</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="k">const</span> <span class="n">int16_t</span> <span class="n">size</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">;</span>
+    <span class="n">int16_t</span> <span class="n">a</span><span class="p">[</span><span class="n">size</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="n">size</span><span class="p">];</span>
+    <span class="cm">/* ... */</span>
+
+    <span class="n">addtwo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>The trick is to convert data to appropriate type (in this case  <em>__v8hi</em>) and adjust
+the rest of code accordingly. The effect of optimization may vary greatly depending
+on type of operation and size of data to be processed. For previous example following
+when <em>addtwo</em> function was called in loop 100 million times. These times were measured:</p>
+
+<table>
+<thead>
+<tr>
+<th> Compiler                           </th>
+<th> Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> gcc 4.5.4 O2                       </td>
+<td> 1m 5.3s</td>
+</tr>
+<tr>
+<td> gcc 4.5.4 O2 auto vectorized       </td>
+<td> 12.7s</td>
+</tr>
+<tr>
+<td> gcc 4.5.4 O2 manual                </td>
+<td> 8.9s</td>
+</tr>
+<tr>
+<td> gcc 4.7.3 O2 auto vectorized       </td>
+<td> 25.s</td>
+</tr>
+<tr>
+<td> gcc 4.7.3 O2 manual                </td>
+<td> 8.9s</td>
+</tr>
+<tr>
+<td> clang 3.3 O3 auto vectorized       </td>
+<td> 8.1s</td>
+</tr>
+<tr>
+<td> clang 3.3 O3 manual                </td>
+<td> 9.5s</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Faster time for auto vectorized code of Clang compiler is probably caused by
+better optimization of outer loop used for testing. Behind slower times for
+GCC 4.7.3 is less efficient memory aligning (see later).</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">int32_t</span> <span class="n">i</span><span class="p">;</span>
+<span class="k">for</span><span class="p">(</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100000000</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">){</span>
+    <span class="n">addtwo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<h3>Using Intristic Functions</h3>
+
+<p>Both <em>GCC</em> and <em>Clang</em> compilers also provide build-in functions also called intristic
+functions to invoke assembly instructions explicitly. Actual intristic functions
+are very complier specific. For x86 platform both compilers provide headers with
+definitions made to match Intel compiler intristics accessible through <em>x86intrin.h</em>.
+Here is a list of header files defining instristics for particular instruction sets:</p>
+
+<ul>
+<li>MMX: <em>mmintrin.h</em></li>
+<li>SSE: <em>xmmintrin.h</em></li>
+<li>SSE2: <em>emmintrin.h</em></li>
+<li>SSE3: <em>mm3dnow.h</em></li>
+<li>3dnow: <em>tmmintrin.h</em></li>
+<li>AVX: <em>immintrin.h</em></li>
+</ul>
+
+
+<p>This is how previous example could be modified using intristic functions:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;string.h&gt;</span>
+<span class="cp">#include &lt;emmintrin.h&gt;</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">__always_inline</span> <span class="n">addtwo</span><span class="p">(</span><span class="n">int16_t</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="n">int16_t</span> <span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">int16_t</span> <span class="n">size</span><span class="p">){</span>
+
+    <span class="n">int16_t</span> <span class="n">i</span><span class="p">;</span>
+    <span class="kr">__m128i</span> <span class="n">c</span> <span class="o">=</span> <span class="n">_mm_set1_epi16</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">i</span><span class="o">+=</span><span class="mi">8</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kr">__m128i</span> <span class="n">bb</span> <span class="o">=</span> <span class="n">_mm_loadu_si128</span><span class="p">(</span><span class="n">b</span><span class="o">+</span><span class="n">i</span><span class="p">);</span>  <span class="c1">// movqdu b+i -&gt; xmm0</span>
+        <span class="kr">__m128i</span> <span class="n">r</span> <span class="o">=</span> <span class="n">_mm_add_epi16</span><span class="p">(</span><span class="n">bb</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>   <span class="c1">// paddw c + xmm0 -&gt; xmm0</span>
+        <span class="n">_mm_storeu_si128</span><span class="p">(</span><span class="n">a</span><span class="o">+</span><span class="n">i</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>           <span class="c1">// movqdu xmm0 -&gt; a+i</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="k">const</span> <span class="n">int16_t</span> <span class="n">size</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">;</span>
+    <span class="n">int16_t</span> <span class="n">a</span><span class="p">[</span><span class="n">size</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="n">size</span><span class="p">];</span>
+    <span class="cm">/* ... */</span>
+
+    <span class="n">addtwo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>This approach might be required when compiler generate suboptimal code or when
+it is not possible express required operations on vector types e.g. due
+branching of code with <em>if</em> statements.</p>
+
+<h3>Memory Aligning</h3>
+
+<p>Also notice that last example use <strong>_mm_loadu_si128</strong> which translates to
+<strong>movqdu</strong> not <strong>movqda</strong>. That is because there is no assurance that <strong>a</strong> or
+<strong>b</strong> are aligned to 16-byte boundary. Using instructions expecting aligned
+memory object to not aligned objects will almost surely lead to runtime errors
+or data corruption. To fix that, attribute <strong>aligned</strong> can be used to instruct
+compiler to align memory objects upon definition. In some cases it might be
+worth to consider aligning critical data to 64 bytes since it is also size of
+x86 L1 cache lines to increase cache utilization.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="cp">#include &lt;stdint.h&gt;</span>
+<span class="cp">#include &lt;string.h&gt;</span>
+<span class="cp">#include &lt;emmintrin.h&gt;</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">__always_inline</span> <span class="n">addtwo</span><span class="p">(</span><span class="n">int16_t</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="n">int16_t</span> <span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">int16_t</span> <span class="n">size</span><span class="p">){</span>
+
+    <span class="n">int16_t</span> <span class="n">i</span><span class="p">;</span>
+    <span class="kr">__m128i</span> <span class="n">c</span> <span class="o">=</span> <span class="n">_mm_set1_epi16</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">i</span><span class="o">+=</span><span class="mi">8</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kr">__m128i</span> <span class="n">bb</span> <span class="o">=</span> <span class="n">_mm_load_si128</span><span class="p">(</span><span class="n">b</span><span class="o">+</span><span class="n">i</span><span class="p">);</span>  <span class="c1">// movqda b+i -&gt; xmm0</span>
+        <span class="kr">__m128i</span> <span class="n">r</span> <span class="o">=</span> <span class="n">_mm_add_epi16</span><span class="p">(</span><span class="n">bb</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>   <span class="c1">// paddw c + xmm0 -&gt; xmm0</span>
+        <span class="n">_mm_store_si128</span><span class="p">(</span><span class="n">a</span><span class="o">+</span><span class="n">i</span><span class="p">,</span> <span class="n">r</span><span class="p">);</span>           <span class="c1">// movqda xmm0 -&gt; a+i</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+    <span class="k">const</span> <span class="n">int16_t</span> <span class="n">size</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">;</span>
+    <span class="n">int16_t</span> <span class="n">a</span><span class="p">[</span><span class="n">size</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="n">size</span><span class="p">]</span> <span class="n">__attribute__</span><span class="p">((</span><span class="n">aligned</span><span class="p">(</span><span class="mi">16</span><span class="p">)));</span>
+    <span class="cm">/* ... */</span>
+
+    <span class="n">addtwo</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">size</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+<span class="p">}</span>
+</code></pre></div>
+
+
+<p>In sense of program speed it is better to use automatic variables than static or
+global variables and avoid dynamic allocation where circumstances allow. For cases
+when dynamic allocation is inevitable <em>the Posix standard</em> provides <strong>posix_memalign</strong>
+and Windows have <strong>_aligned_malloc</strong> function to provide aligned memory allocation.</p>
+
+<p>Effective use of vector extensions and code optimization requires deep knowledge
+about how target architecture works and which assembly instructions could be used
+to make code run faster. Invaluable source of information on this topic is
+<a href="http://www.agner.org/optimize/blog/">Agner`s CPU blog</a> and his set of <a href="http://www.agner.org/optimize/">Optimization manuals</a>.</p>
+
+<h2>Curiosities</h2>
+
+<p>The final section consults few amusing parts of C programing language like this
+one:</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">i</span><span class="p">[</span><span class="n">array</span><span class="p">];</span>
+</code></pre></div>
+
+
+<p>Since subscript operator is equivalent to *(array+i) it also commutative,
+these are also equivalent.</p>
+
+<div class="highlight"><pre><code class="text">$ gcc -dM -E - &lt; /dev/null | grep -e linux -e unix
+#define unix 1
+#define linux 1
+</code></pre></div>
+
+
+<p>GCC by default define both <strong>linux</strong> and <strong>unix</strong> to 1, so code will break if
+one of them is used e.g. as name of function.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="err">'</span><span class="n">FOO</span><span class="o">!</span><span class="err">'</span><span class="p">;</span>
+<span class="kt">short</span> <span class="n">y</span> <span class="o">=</span> <span class="err">'</span><span class="n">BO</span><span class="err">'</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>Yes, character expression can be extended to any integer size.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">x</span> <span class="o">=</span> <span class="n">i</span><span class="o">+++</span><span class="n">k</span><span class="p">;</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">i</span><span class="o">++</span> <span class="o">+</span><span class="n">k</span><span class="p">;</span>
+</code></pre></div>
+
+
+<p>Postfix incrementation operator will be evaluated before add operator.</p>
+
+<div class="highlight"><pre><code class="c++"><span class="n">x</span> <span class="o">=</span> <span class="n">i</span><span class="o">+++++</span><span class="n">k</span><span class="p">;</span> <span class="c1">//error</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">i</span><span class="o">++</span> <span class="o">++</span> <span class="o">+</span><span class="n">k</span><span class="p">;</span> <span class="c1">//error</span>
+
+<span class="n">y</span> <span class="o">=</span> <span class="n">i</span><span class="o">++</span> <span class="o">+</span> <span class="o">++</span><span class="n">k</span><span class="p">;</span> <span class="c1">//ok</span>
+</code></pre></div>
+
+
+<p>Lexical processor is looking for longest sequence of non-whitespace characters
+making token that could be processed (Section 6.4 of C standard). First line
+will be parsed like second line show and both will yield error about missing
+<em>modifiable lvalue</em> which could be incremented by second postfix ++ operator.</p>
+
+<h2>Acknowledgements</h2>
+
+<p>If you have something to add or correct, you are more than welcome to leave a
+comment. Here I would like to thank Stefan Bellus for reviewing for draft for
+this article and Greg Davis for his talks at <a href="http://www.embedded-world.de/en/">Embedded World 2013 Conference</a>,
+which inspired me to write it.</p>
+
+<h2>Updates</h2>
+
+<ul>
+<li>Error in realloc example corected.</li>
+<li>Integer types corrected to unsigned to hold value 65535 in integral promotion demonstration.</li>
+<li>Misleading statement comparing visibility hidden attribute with static declaration corrected.</li>
+<li>Numerous errors in vector example corrected.</li>
+<li>Redundant size &lt; SIZE_MAX removed.</li>
+</ul>
+
+
+<h2>References</h2>
+
+<ul>
+<li><a href="http://www.amazon.com/Expert-Programming-Peter-van-Linden/dp/0131774298">Expert C Programming, Book by Peter van Linden</a></li>
+<li><a href="http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1256.pdf">C99 Standard</a></li>
+<li><a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf">C11 Standard</a></li>
+<li><a href="http://pubs.opengroup.org/onlinepubs/9699919799/">POSIX.1-2008 Standard</a></li>
+<li><a href="http://www.ibm.com/developerworks/linux/library/l-memory/">Inside memory management</a></li>
+<li><a href="http://stoneship.org/essays/c-reference-counting-and-you/">C Reference Counting and You</a></li>
+<li><a href="http://www.cs.nyu.edu/exact/core/doc/stackOverflow.txt">Stack Overflow Problems</a></li>
+<li><a href="http://gcc.gnu.org/onlinedocs/libiberty/Obstacks.html">GNU Obstack</a></li>
+<li><a href="http://talloc.samba.org/talloc/doc/html/index.html">Talloc Documantation</a></li>
+<li><a href="http://www.ravenbrook.com/project/mps/">Ravenbrook Memory Pool System</a></li>
+<li><a href="http://libbsd.freedesktop.org/wiki/">libbsd</a></li>
+<li><a href="http://www.hpl.hp.com/personal/Hans_Boehm/gc/">Boehm-Demers-Weiser conservative garbage collector</a></li>
+<li><a href="http://people.redhat.com/drepper/dsohowto.pdf">How To Write Shared Libraries by Ulrich Drepper</a></li>
+<li><a href="http://www.greenend.org.uk/rjk/tech/inline.html">Inline Functions In C</a></li>
+<li><a href="http://www.agner.org/optimize/blog/">Blog of Agner Fog</a></li>
+<li><a href="http://www.agner.org/optimize/">Optimization Manuals by Agner Fog</a></li>
+<li><a href="http://gcc.gnu.org/projects/tree-ssa/vectorization.html">Auto-vectorization in GCC</a></li>
+<li><a href="http://llvm.org/docs/Vectorizers.html">Auto-Vectorization in LLVM</a></li>
+</ul>
+
+
+</div>
+</div>
+<div id="disqus_thread"><iframe verticalscrolling="no" horizontalscrolling="no" src="guide-to-advanced-programming-in-C_files/a.html" style="width: 1px ! important; min-width: 100% ! important; border: medium none ! important; overflow: hidden ! important; height: 3147px ! important;" title="Disqus" tabindex="0" scrolling="no" allowtransparency="true" name="dsq-app2" id="dsq-app2" frameborder="0" width="100%"></iframe></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+    var disqus_shortname = 'pfackabinaryparadise'; // required: replace example with your forum shortname
+	var disqus_identifier =	'Guide to Advanced Programming in C';
+
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+
+    })();
+
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+    </div>
+
+    <div class="navigation">
+	<a class="home" href="http://pfacka.binaryparadise.com/">Peter Fačka</a>
+
+	<a class="project" href="https://bitbucket.org/pfacka/dict2colander">• dict2colander</a>
+	<a class="project" href="https://bitbucket.org/pfacka/boolexp">• boolexp</a>
+	<a class="project" href="https://bitbucket.org/pfacka/jsonwsp">• jsonwsp</a>
+	<a class="project" href="https://bitbucket.org/pfacka/aamtk">• aamtk</a>
+
+  <div class="bages">
+    <a class="linkedin" href="http://www.linkedin.com/pub/peter-fa%C4%8Dka/37/542/2ab"></a>
+    <a class="coderwall" href="http://coderwall.com/pfacka"></a>
+    <a class="bitbucket" href="http://bitbucket.com/pfacka"></a>
+  </div>
+	<!--
+	<a class="resume' href='/about/me'>&#8226; resume</a>
+	-->
+    </div>
+  	<script type="text/javascript">
+    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+    ga('create', 'UA-50642189-1', 'binaryparadise.com');
+    ga('send', 'pageview');
+  	</script>
+    <a href="https://plus.google.com/100197755838953879779?rel=author">.</a>
+    
+
+</body></html>

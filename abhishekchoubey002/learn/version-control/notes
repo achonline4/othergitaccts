@@ -1,0 +1,16 @@
+Meanings:
+'' : text between single quotes is a standard git command or any command.
+<> : indicates relation
+-> : General statement.
+*  : important statement.
+
+
+
+Checking diff :
+
+Diffs can be seen not just between two files, but also between two commits
+of the same file.
+
+
+* : 'git diff' <works/operates> on commits or commit ids.
+->: commits should be made for every logical change.

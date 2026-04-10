@@ -1,0 +1,5 @@
+References : 
+	-> Cannot be initialized to NULL.
+	-> Cannot be used to refer to another variable.
+	-> must be initialized when it is created.
+	-> The address of a reference variable is same as the address of the varible its pointing to.

@@ -1,0 +1,21 @@
+##################################################################################
+Collection of useful text related to sockets and kernel found on the web.
+##################################################################################
+
+
+
+
+Q. Why netlink instead of system calls, ioctls and etc... ?
+A. Risk of pollting the kernel space with new ioctl/system call definitions.
+
+> Netlink is asynchronous
+> possible to do non-blocking IO on socket
+> Alternate for poll and select is present i.e. ask the kernel to inform application about events on socket fd, by enabling SIGIO flag via 
+	fcntl on socket fd.
+
+Kernel Queueing mechanism: 
+IP stack ----> Driver Queue -----> NIC
+Driver Queue(just a ring buffer, cirular buffer, that contains pointers to sk_buffs which in turn contain the data to be transferred)
+Packets added to the driver queue by the IP stack are dequeued by the hardware driver and sent across a data bus to the NIC hardware for transmission.
+
+The reason the driver queue exists is to ensure that whenever the system has data to transmit, the data is available to the NIC for immediate transmission. That is, the driver queue gives the IP stack a location to queue data asynchronously from the operation of the hardware. One alternative design would be for the NIC to ask the IP stack for data whenever the physical medium is ready to transmit. Since responding to this request cannot be instantaneous this design wastes valuable transmission opportunities resulting in lower throughput. The opposite approach would be for the IP stack to wait after a packet is created until the hardware is ready to transmit. This is also not ideal because the IP stack cannot move on to other work.

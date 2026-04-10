@@ -1,0 +1,16 @@
+Compile time and Runtime
+1. What are the inputs ?
+2. What can go wrong ?
+3. What is expected output ?
+
+Compilte Time :
+1. Source Code, invariants/variants are known.
+2. All or any phase of compilation process. (lexical analysis, semantic analysis, optimization problems.)
+3. A program that can be run on a machine.
+
+Runtime :
+1. We know nothing about the invariants.
+2. Logical Errors or bugs causing program to behave abnormally.  (divide by zero (leads to floating point exception))
+	. May run out of resources like memory, cpu (stalling).
+	. program crashes : due to invalid memory access.
+	. Check errors : errors during opening files(file not found, permission denied...)

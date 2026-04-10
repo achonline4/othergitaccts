@@ -1,0 +1,9 @@
+# what every programmer should know about memory
+
+All CPU's are connected through a common bus, called Front Side Bus.
+North Bridge : contains memory controller, which defines the type of ram that can be used.
+North bridge communicates with south bridge(also called IO bridge) to reach to all other systems.
+
+
+Issues : 
+1. Bandwith contention when multiple devices try to use the same bus

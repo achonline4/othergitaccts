@@ -1,0 +1,20 @@
+View : Display area (can be of any type, text, image, animation...)
+View Group : A larger display area that contains the smaller ones.
+xmls : are used to describe how an app looks.
+All targets should be atleast 48dp. (So that one can easily use them regardless of the device they are using it on )
+
+LAyout weight : 
+
+Relative Layout : relative to edges (left, right, top, bottom)
+Resources: 
+	android:id="@+id/USER_DEFINED_VALUE"
+Padding and Margin :  add white spaces so that views are not just aligned around the boundaries of the screen.
+Padding: can be general, like android:padding="5dp" or can be specific as android:paddingRight/paddingLeft/paddingBottom="5dp"
+Padding gets handled by the view, margin by parent view.
+
+The values should be multiple of 8dp (recommended)
+
+Orientations work with linear layouts
+
+To lookup: 
+Overlapping views
